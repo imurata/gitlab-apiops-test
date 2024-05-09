@@ -1,0 +1,88 @@
+stages:
+- test
+- convert
+- valid
+- deploy
+
+variables:
+  DECK_KONG_ADDR: https://kong.aws.xxxx.info/api
+  DECK_TLS_SKIP_VERIFY: true
+  DECK_HEADERS: "kong-admin-token:$CICD_KONG_ADMIN_TOKEN"
+  WORKSPACE: "httpbin"
+
+lint:
+  rules:
+  - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    changes:
+    - openapi/**/*
+  image: kong/inso
+  stage: test
+  script:
+  - |
+    set -x 
+    echo "Lint OAS spec."
+    inso lint spec openapi/httpbin.yaml
+
+convert-deck:
+  rules:
+  - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    changes:
+    - openapi/**/*
+  - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"'
+    changes:
+    - openapi/**/*
+  image: kong/deck
+  stage: convert
+  script:
+  - |
+    set -x
+    echo "Convert OAS to deck YAML."
+    deck file openapi2kong -s openapi/httpbin.yaml -o deck.yaml
+  artifacts:
+    paths:
+      - deck.yaml
+
+valid-deck:
+  rules:
+  - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    changes:
+    - openapi/**/*
+  - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"'
+    changes:
+    - openapi/**/*
+  image: kong/deck
+  stage: valid
+  script:
+  - |
+    set -x
+    echo "Validate deck.yaml"
+    deck gateway validate deck.yaml
+
+diff-deck:
+  rules:
+  - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    changes:
+    - openapi/**/*
+  - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"'
+    changes:
+    - openapi/**/*
+  image: kong/deck
+  stage: valid
+  script:
+  - |
+    set -x
+    echo "Diff deck.yaml and Gateway"
+    deck gateway diff deck.yaml --workspace $WORKSPACE
+
+deploy:
+  rules:
+  - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"'
+    changes:
+    - openapi/**/*
+  image: kong/deck
+  stage: deploy
+  script:
+  - |
+    set -x
+    echo "Deploy"
+    deck gateway sync deck.yaml --workspace $WORKSPACE
