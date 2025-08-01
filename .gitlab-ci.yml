@@ -5,7 +5,7 @@ stages:
 - deploy
 
 variables:
-  DECK_KONG_ADDR: https://admin.eks.kong-imurata.click
+  DECK_KONG_ADDR: https://admin.example.com
   DECK_TLS_SKIP_VERIFY: true
   DECK_HEADERS: "kong-admin-token:$CICD_KONG_ADMIN_TOKEN"
   WORKSPACE: "httpbin"
