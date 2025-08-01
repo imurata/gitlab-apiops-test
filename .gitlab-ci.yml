@@ -5,23 +5,30 @@ stages:
 - deploy
 
 variables:
-  DECK_KONG_ADDR: https://kong.aws.xxxx.info/api
+  DECK_KONG_ADDR: https://admin.eks.kong-imurata.click
   DECK_TLS_SKIP_VERIFY: true
   DECK_HEADERS: "kong-admin-token:$CICD_KONG_ADMIN_TOKEN"
   WORKSPACE: "httpbin"
+  SPECFILE: openapi/httpbin.yaml
+  TAG: "demo"
 
 lint:
   rules:
   - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     changes:
     - openapi/**/*
+  - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"'
+    changes:
+    - openapi/**/*
   image: kong/inso
+  tags:
+  - shared
   stage: test
   script:
   - |
     set -x 
     echo "Lint OAS spec."
-    inso lint spec openapi/httpbin.yaml
+    inso lint spec $SPECFILE --verbose
 
 convert-deck:
   rules:
@@ -32,12 +39,20 @@ convert-deck:
     changes:
     - openapi/**/*
   image: kong/deck
+  tags:
+  - shared
   stage: convert
   script:
   - |
     set -x
-    echo "Convert OAS to deck YAML."
-    deck file openapi2kong -s openapi/httpbin.yaml -o deck.yaml
+    echo "Convert from OAS to deck YAML."
+    deck file openapi2kong -s $SPECFILE -o deck.yaml --verbose 9
+    echo "Add plugins to deck.yaml."
+    deck file add-plugins -s ./deck.yaml -o ./deck.yaml kong/plugins/*
+    echo "Add consumers to deck.yaml."
+    deck file merge deck.yaml ./kong/consumers/* -o deck.yaml
+    echo "Add a tag"
+    deck file add-tags -s ./deck.yaml -o ./deck.yaml $TAG
   artifacts:
     paths:
       - deck.yaml
@@ -51,6 +66,8 @@ valid-deck:
     changes:
     - openapi/**/*
   image: kong/deck
+  tags:
+  - shared
   stage: valid
   script:
   - |
@@ -67,6 +84,8 @@ diff-deck:
     changes:
     - openapi/**/*
   image: kong/deck
+  tags:
+  - shared
   stage: valid
   script:
   - |
@@ -74,12 +93,35 @@ diff-deck:
     echo "Diff deck.yaml and Gateway"
     deck gateway diff deck.yaml --workspace $WORKSPACE
 
+dump-deck:
+  rules:
+  - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    changes:
+    - openapi/**/*
+  - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"'
+    changes:
+    - openapi/**/*
+  image: kong/deck
+  tags:
+  - shared
+  stage: valid
+  script:
+  - |
+    set -x
+    echo "Back up current settings"
+    deck gateway dump -o ./current-kong.yaml --workspace $WORKSPACE
+  artifacts:
+    paths:
+      - current-kong.yaml
+
 deploy:
   rules:
   - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"'
     changes:
     - openapi/**/*
   image: kong/deck
+  tags:
+  - shared
   stage: deploy
   script:
   - |
