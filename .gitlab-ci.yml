@@ -91,7 +91,7 @@ diff-deck:
   - |
     set -x
     echo "Diff deck.yaml and Gateway"
-    deck gateway diff deck.yaml --workspace $WORKSPACE
+    deck gateway diff deck.yaml --workspace $WORKSPACE --select-tag $TAG
 
 dump-deck:
   rules:
@@ -127,4 +127,4 @@ deploy:
   - |
     set -x
     echo "Deploy"
-    deck gateway sync deck.yaml --workspace $WORKSPACE
+    deck gateway sync deck.yaml --workspace $WORKSPACE --select-tag $TAG
